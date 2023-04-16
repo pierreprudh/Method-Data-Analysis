@@ -1,0 +1,148 @@
+---
+title: "TP5"
+author: "Pierre"
+date: '2022-11-28'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(kernlab)
+library(corrplot)
+library(FactoMineR)
+library(dplyr)
+
+data(spam)
+
+spam_quant <- spam %>% select(-"type")
+spam_quant_norm <- scale(spam_quant)
+
+res.pca <- PCA(spam_quant_norm, graph = F)
+eigvalues <- data.frame(res.pca$eig)
+barplot(eigvalues$percentage.of.variance, names.arg = row.names(eigvalues))
+X <- res.pca$ind$coord
+
+```
+Avant ACP penser à normaliser les données. 
+A peu près 20% des variables sont explicités donc pas terrible.
+Méthode Linéaire -> transformer l espace (+1 dim ?) pour avoir une délimitation linéaire dans cet espace.(pas possible pour une droite -> possible pour un plan)
+
+grande variance expliqué = très peu qualitatve
+Graphe normale car r range par ordre croissant 
+
+
+```{r}
+Tab <- Tab[,25:40]
+corrplot(cor(Tab))
+```
+
+```{r}
+plot(X[,1],X[,2], col = as.numeric(spam$type)+1)
+```
+
+```{r}
+m = 100
+N =nrow(spam_quant_norm)
+
+Tirage <- sample(1:N, m, replace = FALSE)
+spam_subset = spam_quant_norm[Tirage,]
+kpc <- kpca(~., data = as.data.frame (spam_subset), kernel = "rbfdot", kpar = list(sigma=0.01))
+kpvc <- pcv(kpc)
+plot(rotated(kpc)[,1:2], xlab = "1st Principale Comp.", ylab = "2nd Principale Comp.")
+barplot(eig(kpc)/sum(eig(kpc)))
+```
+RBF Linéaire Polynomial
+On a explicité presque 25% de la variance ici donc pas assez ici -> on veut donc changer de méthode
+
+#Exercice 2 
+```{r}
+library(mlbench)
+set.seed(111)
+obj <- mlbench.spirals(100,1,0.025)
+my.data <- data.frame(4 * obj$x)
+names(my.data)<-c("X1","X2")
+plot(my.data)
+
+#Kmeans pas disponible ici car pas de groupe grossier
+```
+
+$$K_\phi(X_i, X_j) = exp(- \frac {1} {2\sigma^2} * || X_i - X_j||_2^2) \\ = exp(- \sigma||X_i - X_j||) \\ \textrm{with : } \sigma = 1$$
+Sigma =1 car ca marche ici mais pas parfait 
+$$ K_\phi(X_i, X_j) = < \phi(X_i), \phi(X_j)> \\ $$ 
+Dans un certain espace de Hilbert
+-> Implémentation de Kernlab
+
+Matrice de similarité semi def positive et symétrique
+sigma -> 100 rien est lié car écraser dans le exp 
+      -> 0.01 tout est lié
+```{r}
+library(kernlab)
+my.data <- as.matrix(my.data)
+rbfkernel <- rbfdot(sigma = 1)
+K <- as.matrix(kernelMatrix(rbfkernel, my.data))
+image(K)
+```
+Affinité matrix A -> matrice d'adjacence 
+créer a partir de K si Kij > seuil on met un 1 
+      Sinon on prends les K plus grand coeff de la ligne
+K matrice noyau -> coefficicent élévé -> individu proche
+```{r}
+diag(K ) = 0 
+N= 100
+A <- matrix(0,N, N)
+neighbor <- 3
+for(i in 1:N){
+  idx <- order(K[i,], decreasing= T)[1: neighbor] #renvoie les indices
+  A[i, idx] = 1
+  
+}
+image(A)
+
+```
+```{r}
+A <- K>0.5
+diag(A) = 0
+image(A)
+```
+
+D with neighbor mehtod -> always diag(neighbor)
+```{r}
+D <- diag(N)
+
+D <- rowSums(A)
+```
+
+```{r}
+U = D - A 
+L <- scale(U)
+```
+
+```{r}
+L_value <- eigen(L, symmetric = TRUE)
+k <- 2
+Z <- L_value$vectors[,(ncol(L_value$vectors)-k+1):ncol(L_value$vectors)]
+#prendre 4 derniers vecteurs et voir bien deux groupes
+
+plot(Z)
+```
+
+
+
+
+```{r}
+my.data<-as.matrix(my.data)
+kpc_data <- kpca(~., data = as.data.frame (my.data), kernel = "rbfdot", kpar = list(sigma=1))
+
+kpvc_data <- pcv(kpc_data)
+plot(rotated(kpc_data)[,1:2], xlab = "1st Principale Comp.", ylab = "2nd Principale Comp.")
+barplot(eig(kpc_data)/sum(eig(kpc_data)))
+
+```
+
+
+
+
+
